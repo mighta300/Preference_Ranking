@@ -43,7 +43,7 @@ with tab1:
             # Render step inputs with - / + buttons for each choice independently
             for i, choice in enumerate(choices):
                 rank = st.number_input(
-                    f"Rank for {choice}:",
+                    f"{choice}:",
                     min_value=1,
                     max_value=len(choices),
                     value=i + 1,  # Sets default sequential ranks (1, 2, 3...) to help avoid accidental ties
