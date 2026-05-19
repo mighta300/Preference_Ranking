@@ -19,6 +19,14 @@ def get_global_db():
 
 db = get_global_db()
 
+# Initialize session-specific variables to manage the confirmation overlay step
+if "confirm_submit" not in st.session_state:
+    st.session_state.confirm_submit = False
+if "pending_vote" not in st.session_state:
+    st.session_state.pending_vote = None
+if "pending_name" not in st.session_state:
+    st.session_state.pending_name = ""
+
 # --- APP LAYOUT ---
 st.title("🤝 Automated Team Matcher")
 st.write("Teammates can cast their private votes below. Progress updates live.")
@@ -35,34 +43,64 @@ with tab1:
     st.info(f"**Progress Live Tracker:** {current_votes} out of {target_votes} teammates have submitted.")
     
     if current_votes < target_votes:
-        with st.form("voting_form"):
-            name = st.text_input("Your Name:")
-            st.write("Rank the items below using the **-** and **+** buttons. **1 is your favorite**, 2 is second favorite, etc.")
-            
-            user_ranks = []
-            # Render step inputs with - / + buttons for each choice independently
-            for i, choice in enumerate(choices):
-                rank = st.number_input(
-                    f"{choice}:",
-                    min_value=1,
-                    max_value=len(choices),
-                    value=i + 1,  # Sets default sequential ranks (1, 2, 3...) to help avoid accidental ties
-                    step=1,
-                    key=f"vote_{choice}"
-                )
-                user_ranks.append(rank)
+        # Step 1: Render the Primary Voting Form
+        if not st.session_state.confirm_submit:
+            with st.form("voting_form"):
+                name = st.text_input("Your Name:")
+                st.write("Rank the items below using the **-** and **+** buttons. **1 is your favorite**, 2 is second favorite, etc.")
                 
-            submitted = st.form_submit_button("Submit Private Vote")
-            if submitted:
-                if not name:
-                    st.error("❌ Please enter your name before submitting.")
-                elif name in db["votes"]:
-                    st.error("❌ A teammate with this name has already voted!")
-                elif len(set(user_ranks)) != len(user_ranks):
-                    st.error("❌ Submission Blocked: You assigned the same rank to multiple choices. Please remove any ties!")
-                else:
-                    db["votes"][name] = user_ranks
+                user_ranks = []
+                # Render step inputs with - / + buttons for each choice independently
+                for i, choice in enumerate(choices):
+                    rank = st.number_input(
+                        f"{choice}:",
+                        min_value=1,
+                        max_value=len(choices),
+                        value=i + 1,  # Sets default sequential ranks (1, 2, 3...) to help avoid accidental ties
+                        step=1,
+                        key=f"vote_{choice}"
+                    )
+                    user_ranks.append(rank)
+                    
+                submitted = st.form_submit_button("Submit Private Vote")
+                if submitted:
+                    if not name:
+                        st.error("❌ Please enter your name before submitting.")
+                    elif name in db["votes"]:
+                        st.error("❌ A teammate with this name has already voted!")
+                    elif len(set(user_ranks)) != len(user_ranks):
+                        st.error("❌ Submission Blocked: You assigned the same rank to multiple choices. Please remove any ties!")
+                    else:
+                        # Intercept submission: cache values locally in session_state and flip confirmation flag
+                        st.session_state.pending_name = name
+                        st.session_state.pending_vote = user_ranks
+                        st.session_state.confirm_submit = True
+                        st.rerun()
+        
+        # Step 2: Render the Confirmation Box with Yes/No Buttons
+        else:
+            st.warning(f"⚠️ **Attention {st.session_state.pending_name}:** Once you submit, your decision is final and cannot be modified. Do you want to proceed?")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ Yes, Submit", use_container_width=True):
+                    # Commit state parameters to the global database instance
+                    db["votes"][st.session_state.pending_name] = st.session_state.pending_vote
+                    
+                    # Flush temporary buffer fields
+                    st.session_state.confirm_submit = False
+                    st.session_state.pending_name = ""
+                    st.session_state.pending_vote = None
+                    
                     st.success("Your vote has been recorded privately!")
+                    st.rerun()
+                    
+            with col2:
+                if st.button("❌ No, Go Back", use_container_width=True):
+                    # Revert back to the initial input form state safely
+                    st.session_state.confirm_submit = False
+                    st.session_state.pending_name = ""
+                    st.session_state.pending_vote = None
                     st.rerun()
     else:
         st.success("🎉 All teammates have responded! Calculating the optimal allocation...")
