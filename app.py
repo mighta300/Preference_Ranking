@@ -3,6 +3,9 @@ import pandas as pd
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
+# --- CONFIGURATION ---
+ADMIN_PASSWORD = "admin"  # 👈 Change this to your preferred password!
+
 # --- GLOBAL SHARED DATABASE ---
 @st.cache_resource
 def get_global_db():
@@ -18,26 +21,12 @@ db = get_global_db()
 
 # --- APP LAYOUT ---
 st.title("🤝 Automated Team Matcher")
-st.write("An admin sets it up, teammates vote privately, and results unlock when everyone finishes.")
+st.write("Teammates can cast their private votes below. Progress updates live.")
 
-tab1, tab2 = st.tabs(["⚙️ Admin Setup", "🗳️ Teammate Portal"])
+tab1, tab2 = st.tabs(["🗳️ Teammate Portal", "⚙️ Admin Setup"])
 
-# --- TAB 1: ADMIN SETUP ---
+# --- TAB 1: TEAMMATE PORTAL (Default View) ---
 with tab1:
-    st.header("Configure the Matchmaking Event")
-    
-    target = st.number_input("How many teammates need to participate?", min_value=1, value=db["config"]["target_votes"])
-    choices_raw = st.text_input("Enter the choices/objects (comma-separated):", ", ".join(db["config"]["choices"]))
-    
-    if st.button("Save & Initialize Page"):
-        choices_list = [c.strip() for c in choices_raw.split(",") if c.strip()]
-        db["config"] = {"target_votes": target, "choices": choices_list}
-        db["votes"] = {} 
-        st.success("Page configured globally! You can now share your URL with your team.")
-        st.rerun()
-
-# --- TAB 2: TEAMMATE PORTAL ---
-with tab2:
     choices = db["config"]["choices"]
     target_votes = db["config"]["target_votes"]
     current_votes = len(db["votes"])
@@ -48,15 +37,17 @@ with tab2:
     if current_votes < target_votes:
         with st.form("voting_form"):
             name = st.text_input("Your Name:")
-            st.write("Rank the items below. **1 is your favorite**, 2 is second favorite, etc.")
+            st.write("Rank the items below using the **-** and **+** buttons. **1 is your favorite**, 2 is second favorite, etc.")
             
             user_ranks = []
-            # Render a simple selection dropdown (1 to N) for every choice independently
-            for choice in choices:
-                rank = st.selectbox(
+            # Render step inputs with - / + buttons for each choice independently
+            for i, choice in enumerate(choices):
+                rank = st.number_input(
                     f"Rank for {choice}:",
-                    options=list(range(1, len(choices) + 1)),
-                    index=0,
+                    min_value=1,
+                    max_value=len(choices),
+                    value=i + 1,  # Sets default sequential ranks (1, 2, 3...) to help avoid accidental ties
+                    step=1,
                     key=f"vote_{choice}"
                 )
                 user_ranks.append(rank)
@@ -67,7 +58,6 @@ with tab2:
                     st.error("❌ Please enter your name before submitting.")
                 elif name in db["votes"]:
                     st.error("❌ A teammate with this name has already voted!")
-                # Check for duplicates: if the length of unique ranks is less than total choices, a tie exists
                 elif len(set(user_ranks)) != len(user_ranks):
                     st.error("❌ Submission Blocked: You assigned the same rank to multiple choices. Please remove any ties!")
                 else:
@@ -77,7 +67,7 @@ with tab2:
     else:
         st.success("🎉 All teammates have responded! Calculating the optimal allocation...")
 
-# --- ALGORITHM & RESULTS SECTION ---
+    # --- ALGORITHM & CLEAN RESULTS SECTION ---
     if len(db["votes"]) >= target_votes:
         st.header("🏁 Final Matched Results")
         
@@ -97,4 +87,25 @@ with tab2:
         
         res_df = pd.DataFrame(match_results)
         st.balloons()
-        st.table(res_df)
+        st.dataframe(res_df, use_container_width=True, hide_index=True)
+
+# --- TAB 2: ADMIN SETUP (Protected View) ---
+with tab2:
+    st.header("🔒 Admin Authentication")
+    input_password = st.text_input("Enter Admin Password to modify settings:", type="password")
+    
+    if input_password == ADMIN_PASSWORD:
+        st.success("Access Granted.")
+        st.subheader("Configure the Matchmaking Event")
+        
+        target = st.number_input("How many teammates need to participate?", min_value=1, value=db["config"]["target_votes"])
+        choices_raw = st.text_input("Enter the choices/objects (comma-separated):", ", ".join(db["config"]["choices"]))
+        
+        if st.button("Save & Initialize Page"):
+            choices_list = [c.strip() for c in choices_raw.split(",") if c.strip()]
+            db["config"] = {"target_votes": target, "choices": choices_list}
+            db["votes"] = {} 
+            st.success("Page reconfigured globally! Fresh voting session started.")
+            st.rerun()
+    elif input_password != "":
+        st.error("❌ Incorrect Password. Access Denied.")
