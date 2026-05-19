@@ -3,13 +3,20 @@ import pandas as pd
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
-# --- IN-MEMORY DATABASE SIMULATION ---
-# For a live production web app, replace st.session_state with a real database
-# like Streamlit's connection to Google Sheets or Supabase.
-if "db_initialized" not in st.session_state:
-    st.session_state.db_initialized = True
-    st.session_state.config = {"target_votes": 3, "choices": ["Choice A", "Choice B", "Choice C"]}
-    st.session_state.votes = {}  # Format: { "Teammate Name": [Rank1, Rank2, Rank3] }
+# --- GLOBAL SHARED DATABASE (Shared across all users/devices) ---
+@st.cache_resource
+def get_global_db():
+    # This dictionary persists on the server memory across all sessions
+    return {
+        "config": {
+            "target_votes": 3, 
+            "choices": ["Choice A", "Choice B", "Choice C"]
+        },
+        "votes": {}  # Format: { "Teammate Name": [Rank1, Rank2, Rank3] }
+    }
+
+# Fetch the single global instance of our data
+db = get_global_db()
 
 # --- APP LAYOUT ---
 st.title("🤝 Automated Team Matcher")
@@ -22,24 +29,26 @@ tab1, tab2 = st.tabs(["⚙️ Admin Setup", "🗳️ Teammate Portal"])
 with tab1:
     st.header("Configure the Matchmaking Event")
     
-    target = st.number_input("How many teammates need to participate?", min_value=1, value=st.session_state.config["target_votes"])
-    choices_raw = st.text_input("Enter the choices/objects (comma-separated):", ", ".join(st.session_state.config["choices"]))
+    target = st.number_input("How many teammates need to participate?", min_value=1, value=db["config"]["target_votes"])
+    choices_raw = st.text_input("Enter the choices/objects (comma-separated):", ", ".join(db["config"]["choices"]))
     
     if st.button("Save & Initialize Page"):
         choices_list = [c.strip() for c in choices_raw.split(",") if c.strip()]
-        st.session_state.config = {"target_votes": target, "choices": choices_list}
-        st.session_state.votes = {} # Reset votes for new session
-        st.success("Page configured successfully! Share your URL with your team.")
+        # Update the global memory directly
+        db["config"] = {"target_votes": target, "choices": choices_list}
+        db["votes"] = {} # Clear past votes for the new session
+        st.success("Page configured globally! You can now share your URL with your team.")
+        st.rerun()
 
 # --- TAB 2: TEAMMATE PORTAL ---
 with tab2:
-    choices = st.session_state.config["choices"]
-    target_votes = st.session_state.config["target_votes"]
-    current_votes = len(st.session_state.votes)
+    choices = db["config"]["choices"]
+    target_votes = db["config"]["target_votes"]
+    current_votes = len(db["votes"])
     
     st.header("Cast Your Private Vote")
     
-    # Live Progress Tracker
+    # Live Progress Tracker (Now updates globally in real-time!)
     st.info(f"**Progress Live Tracker:** {current_votes} out of {target_votes} teammates have submitted.")
     
     # Voting Form (Hidden if group already finished)
@@ -57,40 +66,41 @@ with tab2:
             if submitted:
                 if not name:
                     st.error("Please enter your name before submitting.")
-                elif name in st.session_state.votes:
-                    st.error("You have already voted!")
+                elif name in db["votes"]:
+                    st.error("A teammate with this name has already voted!")
                 else:
-                    st.session_state.votes[name] = user_ranks
-                    st.rerun() # Refresh to update the progress counter
+                    # Write directly to the global database
+                    db["votes"][name] = user_ranks
+                    st.success("Your vote has been recorded privately!")
+                    st.rerun() # Refresh immediately to update the counter for this user
     else:
         st.success("🎉 All teammates have responded! Calculating the optimal allocation...")
 
     # --- ALGORITHM & RESULTS SECTION ---
-    # This block only unlocks and executes when current_votes == target_votes
-    if len(st.session_state.votes) >= target_votes:
+    # Unlocks instantly for everyone once the target is hit
+    if len(db["votes"]) >= target_votes:
         st.header("🏁 Final Matched Results")
         
-        team_members = list(st.session_state.votes.keys())
+        team_members = list(db["votes"].keys())
         
-        # Build the cost matrix from preferences
+        # Build the cost matrix from global preferences
         cost_matrix = []
         for member in team_members:
-            cost_matrix.append(st.session_state.votes[member])
+            cost_matrix.append(db["votes"][member])
         
         cost_matrix = np.array(cost_matrix)
         
-        # Run Hungarian Algorithm (Linear Sum Assignment) to maximize total preference satisfaction
+        # Run Hungarian Algorithm to maximize total satisfaction
         row_ind, col_ind = linear_sum_assignment(cost_matrix)
         
         # Format results into a clean table
         match_results = []
         for r, c in zip(row_ind, col_ind):
-            # Safe boundary check if choices/team counts are slightly asymmetric
             if r < len(team_members) and c < len(choices):
                 match_results.append({
                     "Teammate": team_members[r],
                     "Assigned Choice": choices[c],
-                    "Preference Rank": st.session_state.votes[team_members[r]][c]
+                    "Preference Rank": db["votes"][team_members[r]][c]
                 })
         
         res_df = pd.DataFrame(match_results)
