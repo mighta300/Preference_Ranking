@@ -29,9 +29,10 @@ if "pending_name" not in st.session_state:
 
 # --- APP LAYOUT ---
 st.title("🤝 Automated Team Matcher")
-st.write("Teammates can cast their private votes below. Progress updates live.")
+st.write("Teammates can cast their private votes below. Results will show up when everyone votes.")
 
-tab1, tab2 = st.tabs(["🗳️ Teammate Portal", "⚙️ Admin Setup"])
+# Added a third tab dedicated entirely to the algorithm's explanation
+tab1, tab2, tab3 = st.tabs(["🗳️ Teammate Portal", "⚙️ Admin Setup", "ℹ️ How It Works"])
 
 # --- TAB 1: TEAMMATE PORTAL (Default View) ---
 with tab1:
@@ -147,3 +148,14 @@ with tab2:
             st.rerun()
     elif input_password != "":
         st.error("❌ Incorrect Password. Access Denied.")
+
+# --- TAB 3: HOW IT WORKS (Public Educational Explanation) ---
+with tab3:
+    st.header("⚙️ Intuition")
+    
+    st.markdown("""
+    ### The Hungarian Algorithm (Kuhn-Munkres)
+    1. **The Goal:** The algorithm minimizes the global sum of assigned ranks. Since a lower rank means a more preferred item ($1 = \\text{Favorite}$), minimizing this total sum mathematically translates to **maximizing total group satisfaction**.
+    2. **Why it's fair:** If Alice and Bob both want *Choice A* as their #1, but Alice absolutely hates *Choice B* (ranks it #3) while Bob doesn't mind it (ranks it #2), the system computes these trade-offs. It allocates *Choice A* to Alice and *Choice B* to Bob because that matrix pair minimizes global disappointment ($1 + 2 = 3$) compared to the reverse ($3 + 1 = 4$).
+    3. **Strategy-Proofness:** Because the mechanism actively aims to grant everyone their highest available choice globally, your best strategy is always to report your **true, honest preferences**. Altering your true rankings strategically is highly likely to backfire.
+    """)
