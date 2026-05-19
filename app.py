@@ -53,7 +53,7 @@ with tab2:
                 rank = st.number_input(f"Rank for {choice}:", min_value=1, max_value=len(choices), step=1, key=f"vote_{choice}")
                 user_ranks.append(rank)
                 
-            submitted = st.form_submit_with_button("Submit Private Vote")
+            submitted = st.form_submit_button("Submit Private Vote")
             if submitted:
                 if not name:
                     st.error("Please enter your name before submitting.")
