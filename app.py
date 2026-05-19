@@ -92,8 +92,7 @@ with tab2:
             if r < len(team_members) and c < len(choices):
                 match_results.append({
                     "Teammate": team_members[r],
-                    "Assigned Choice": choices[c],
-                    "Preference Rank": db["votes"][team_members[r]][c]
+                    "Assigned Choice": choices[c]
                 })
         
         res_df = pd.DataFrame(match_results)
