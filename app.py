@@ -48,48 +48,36 @@ with tab2:
     if current_votes < target_votes:
         with st.form("voting_form"):
             name = st.text_input("Your Name:")
-            st.write("Rank the items dynamically below. **Ties are prohibited**—each choice can only be selected once.")
+            st.write("Rank the items below. **1 is your favorite**, 2 is second favorite, etc.")
             
-            # Formulate sequential preference dropdowns to strictly avoid ties
-            remaining_choices = list(choices)
-            ordered_selections = []
-            
-            for i in range(len(choices)):
-                rank_num = i + 1
-                # Fallback to avoid crashes if choices list gets corrupted
-                if remaining_choices:
-                    selection = st.selectbox(
-                        f"Select your Rank #{rank_num} (Favorite #{rank_num}):",
-                        options=remaining_choices,
-                        key=f"rank_select_{rank_num}"
-                    )
-                    ordered_selections.append(selection)
-                    # Remove the selected item so it cannot be selected for subsequent ranks
-                    remaining_choices.remove(selection)
-            
+            user_ranks = []
+            # Render a simple selection dropdown (1 to N) for every choice independently
+            for choice in choices:
+                rank = st.selectbox(
+                    f"Rank for {choice}:",
+                    options=list(range(1, len(choices) + 1)),
+                    index=0,
+                    key=f"vote_{choice}"
+                )
+                user_ranks.append(rank)
+                
             submitted = st.form_submit_button("Submit Private Vote")
             if submitted:
                 if not name:
-                    st.error("Please enter your name before submitting.")
+                    st.error("❌ Please enter your name before submitting.")
                 elif name in db["votes"]:
-                    st.error("A teammate with this name has already voted!")
+                    st.error("❌ A teammate with this name has already voted!")
+                # Check for duplicates: if the length of unique ranks is less than total choices, a tie exists
+                elif len(set(user_ranks)) != len(user_ranks):
+                    st.error("❌ Submission Blocked: You assigned the same rank to multiple choices. Please remove any ties!")
                 else:
-                    # Map the ordered selections back to the original choices index positions
-                    # Example: if user selected [Choice B, Choice C, Choice A]
-                    # Their ranks for [Choice A, Choice B, Choice C] should be [3, 1, 2]
-                    user_ranks = []
-                    for choice in choices:
-                        # Rank is index position in ordered_selections + 1
-                        rank_value = ordered_selections.index(choice) + 1
-                        user_ranks.append(rank_value)
-                    
                     db["votes"][name] = user_ranks
                     st.success("Your vote has been recorded privately!")
                     st.rerun()
     else:
         st.success("🎉 All teammates have responded! Calculating the optimal allocation...")
 
-    # --- ALGORITHM & RESULTS SECTION ---
+# --- ALGORITHM & RESULTS SECTION ---
     if len(db["votes"]) >= target_votes:
         st.header("🏁 Final Matched Results")
         
